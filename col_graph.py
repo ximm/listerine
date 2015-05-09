@@ -2,9 +2,9 @@
 
 # TODO:     consider making sub-collections and ancestors vectors include self to simplify ES DSL queries performed by Listerine
 # TODO:     compute invalidations (reindexing lists)
-# TODO:     
+# TODO:     possible optimization: caching all collection data in separate non-sharded index with copy on every node
+#               * idea is to guarantee terms query can GET sub-set data on local node, lowering intra-cluster traffic
 
-# NOTE:     indexing cleaned items relies on graph being fully indexed with sub-collection/list/set, items cannot be correctly indexed UNTIL INDEX IS POPULATED WITH GRAPH
 
 import sys
 import os
@@ -16,16 +16,21 @@ import copy
 #
 #   RECIPE
 #
-#   1. Collect raw dump of all items and their collection and member vectors -- from Elasticdump from existing index / Metamgr / users table / whatever
-#   2. Process COLLECTIONS to calculate:
-#           collection_reduced and then collection_expanded vector (from original collection);
-#           list_reduced then list_expanded (by inverting members.json); and
-#           set_reduced and set_expanded synthesized as deep union of above (NOT simple union of individual expansions)
-#      This script dumps results as json dicts per item for indexer ingest (see es_indexer.php)
-#   3. INDEX COLLECTIONS into clean ES index those fields. Sub-collection/list/set fields CANNOT be calculated on first pass; disable queries in indexer for fast indexing (in ESIndexer.php).
-#   4. REINDEX COLLECTIONS. This time, enable queries to populate cached sub-collection/list/set fields (now that all _expanded values are available)
-#   5. Process ITEMS, populating collection_reduced for each; and list_reduced USING MEMBERSHIP QUERY
-#      This query can be done at index time or here 
+#   NOTE:     indexing cleaned items relies on graph being fully indexed with sub-collection/list/set, items cannot be correctly indexed UNTIL INDEX IS POPULATED WITH GRAPH
+#
+#   1. Generate raw dump of all items with their collection and member vectors, e.g. from Elasticdump from an existing index, Metamgr, iamine, and/or users table (for membership)
+#   2. Process COLLECTIONS:
+#           derive collection_reduced and then collection_expanded vector (from original collection vector);
+#           derive list_reduced then list_expanded by inverting members (from members.json); and
+#           synthesize set_reduced and set_expanded as a recursive deep union of above (NOT a simple union of individual _expanded vectors!)
+#      This script dumps results, one json dict per item per line, for subsequent indexer ingest (see es_indexer.php)
+#   3. INDEX COLLECTIONS into a clean ES index. Only reduced and expanded set and collection matter; sub-collection/list/set fields CANNOT be calculated on first pass
+#           * disable sub-collection queries in indexer for fast indexing (in ESIndexer.php).
+#   4. REINDEX COLLECTIONS. This time, indexing can populate sub-collection/list/set fields (since _expanded values are now completely searchable in the index)
+#   5. Process ITEMS, dumping one json dict per item per line, only relevant field is rcollection_reduced
+#   6. INDEX ITEMS with collection_reduced from dump and calculate list_reduced using queries (into same ES index holding collection graph data)
+#           * membership retrieved via Listerine which makes ES query in es_indexer
+#   7. Listerine API can now answer questions about collection, list, and set membership in both immediate (reduced) and expanded cases, and produce facets
 #
 #   TERMINOLOGY
 #
