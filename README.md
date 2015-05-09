@@ -8,6 +8,12 @@ Powered by: ES DSL terms filter ability to perform indirection
 
 Truth and completeness are not guaranteed, but they are engineered for.
 
+TODO:
+   Graphite for all behaviors
+   Update comments in Listerine to reflect refactored reality
+   Implement paging and sorting of results, expose in Listerine API
+   Investigate how to parse LUCENE style queries and mix with existing constraints
+
    RECIPE
 
    NOTE:     indexing cleaned items relies on graph being fully indexed with sub-collection/list/set, items cannot be correctly indexed UNTIL INDEX IS POPULATED WITH GRAPH
