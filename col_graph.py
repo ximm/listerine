@@ -58,9 +58,10 @@ import copy
 #
 #     * note that set expansion is N x MORE than the simple union of computed collection_expanded list_expanded!
 #
-#   D. item output for indexing
-#       10. should contain ALL fields above, plus native members and original collections vector
-
+#   FOR ALL ITEMS,
+#    ensure we have list_reduced and collection_reduced (for runtime expansion case)
+#
+#   See Listerine.inc for API 
 
 # 1. raw output of elasticdump
 
