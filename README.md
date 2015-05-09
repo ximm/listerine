@@ -1,11 +1,12 @@
 # listerine
 
-Real-time truth about Archive lists and collections graph, leveraging Elasticseach.
+Approximating real-time truth about Archive lists and collections graph, leveraging Elasticseach.
 
 Principle: cache collection graph to avoid necessity of fully denormalized collection/list ancestry in every item.
 Motivation: reduce re-indexing on invalidation from simple UI actions two orders of magnitude
 Powered by: ES DSL terms filter ability to perform indirection
 
+Truth and completeness are not guaranteed, but they are engineered for.
 
    RECIPE
 
