@@ -1,0 +1,1 @@
+for i in $(seq 0 20); do (while `true`; do /home/ximm/petabox/sw/bin/se_indexer.php --qpath=/1/aa2 --unqueue=400 --es --unqueue-threshold=`expr 1 + $i \* 200` --pause=$i ; done >> /1/ximm_tmp/es_indexer.log 2>&1 ) & done

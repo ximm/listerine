@@ -1,0 +1,24 @@
+php /home/ximm/projects/search/es_indexer.php --postlines=900000 --ldpath=/1/ximm_tmp/cut/xaa &> /1/ximm_tmp/cut/logs/xaa.log &
+php /home/ximm/projects/search/es_indexer.php --postlines=900000 --ldpath=/1/ximm_tmp/cut/xab &> /1/ximm_tmp/cut/logs/xab.log &
+php /home/ximm/projects/search/es_indexer.php --postlines=900000 --ldpath=/1/ximm_tmp/cut/xac &> /1/ximm_tmp/cut/logs/xac.log &
+php /home/ximm/projects/search/es_indexer.php --postlines=900000 --ldpath=/1/ximm_tmp/cut/xad &> /1/ximm_tmp/cut/logs/xad.log &
+php /home/ximm/projects/search/es_indexer.php --postlines=900000 --ldpath=/1/ximm_tmp/cut/xae &> /1/ximm_tmp/cut/logs/xae.log &
+php /home/ximm/projects/search/es_indexer.php --postlines=900000 --ldpath=/1/ximm_tmp/cut/xaf &> /1/ximm_tmp/cut/logs/xaf.log &
+php /home/ximm/projects/search/es_indexer.php --postlines=900000 --ldpath=/1/ximm_tmp/cut/xag &> /1/ximm_tmp/cut/logs/xag.log &
+php /home/ximm/projects/search/es_indexer.php --postlines=900000 --ldpath=/1/ximm_tmp/cut/xah &> /1/ximm_tmp/cut/logs/xah.log &
+php /home/ximm/projects/search/es_indexer.php --postlines=900000 --ldpath=/1/ximm_tmp/cut/xai &> /1/ximm_tmp/cut/logs/xai.log &
+php /home/ximm/projects/search/es_indexer.php --postlines=900000 --ldpath=/1/ximm_tmp/cut/xaj &> /1/ximm_tmp/cut/logs/xaj.log &
+php /home/ximm/projects/search/es_indexer.php --postlines=900000 --ldpath=/1/ximm_tmp/cut/xak &> /1/ximm_tmp/cut/logs/xak.log &
+php /home/ximm/projects/search/es_indexer.php --postlines=900000 --ldpath=/1/ximm_tmp/cut/xal &> /1/ximm_tmp/cut/logs/xal.log &
+php /home/ximm/projects/search/es_indexer.php --postlines=900000 --ldpath=/1/ximm_tmp/cut/xam &> /1/ximm_tmp/cut/logs/xam.log &
+php /home/ximm/projects/search/es_indexer.php --postlines=900000 --ldpath=/1/ximm_tmp/cut/xan &> /1/ximm_tmp/cut/logs/xan.log &
+php /home/ximm/projects/search/es_indexer.php --postlines=900000 --ldpath=/1/ximm_tmp/cut/xao &> /1/ximm_tmp/cut/logs/xao.log &
+php /home/ximm/projects/search/es_indexer.php --postlines=900000 --ldpath=/1/ximm_tmp/cut/xap &> /1/ximm_tmp/cut/logs/xap.log &
+php /home/ximm/projects/search/es_indexer.php --postlines=900000 --ldpath=/1/ximm_tmp/cut/xaq &> /1/ximm_tmp/cut/logs/xaq.log &
+php /home/ximm/projects/search/es_indexer.php --postlines=900000 --ldpath=/1/ximm_tmp/cut/xar &> /1/ximm_tmp/cut/logs/xar.log &
+php /home/ximm/projects/search/es_indexer.php --postlines=900000 --ldpath=/1/ximm_tmp/cut/xas &> /1/ximm_tmp/cut/logs/xas.log &
+php /home/ximm/projects/search/es_indexer.php --postlines=900000 --ldpath=/1/ximm_tmp/cut/xat &> /1/ximm_tmp/cut/logs/xat.log &
+php /home/ximm/projects/search/es_indexer.php --postlines=900000 --ldpath=/1/ximm_tmp/cut/xau &> /1/ximm_tmp/cut/logs/xau.log &
+php /home/ximm/projects/search/es_indexer.php --postlines=900000 --ldpath=/1/ximm_tmp/cut/xav &> /1/ximm_tmp/cut/logs/xav.log &
+php /home/ximm/projects/search/es_indexer.php --postlines=900000 --ldpath=/1/ximm_tmp/cut/xzz &> /1/ximm_tmp/cut/logs/xzz.log &
+ps fauxwww | grep /home/ximm/projects/search/es_indexer.php

@@ -1,0 +1,2 @@
+elasticdump --maxSockets=1000 --input=http://es-lb.archive.org:9200/archive-all-2 --output=$ --limit=10000 --searchBody '{ "_source": ["collection","mediatype","members"], "filter" : { "term": {"mediatype":"collection"} } }' | pv -acbrl > collection_dump.json
+elasticdump --maxSockets=1000 --input=http://es-lb.archive.org:9200/archive-all-2 --output=$ --limit=10000 --searchBody '{ "_source": ["collection","mediatype","members"], "filter" : { "bool": { "must_not": [ { "term": {"mediatype":"collection"} } ] } } } ' | pv -acbrl > item_dump.json

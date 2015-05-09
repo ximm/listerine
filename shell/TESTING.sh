@@ -1,0 +1,11 @@
+php es_indexer.php --postlines=900000 --ldpath=/1/ximm_tmp/cut/xaa &> /1/ximm_tmp/cut/logs/xaa.log &
+php es_indexer.php --postlines=900000 --ldpath=/1/ximm_tmp/cut/xab &> /1/ximm_tmp/cut/logs/xab.log &
+php es_indexer.php --postlines=900000 --ldpath=/1/ximm_tmp/cut/xac &> /1/ximm_tmp/cut/logs/xac.log &
+php es_indexer.php --postlines=900000 --ldpath=/1/ximm_tmp/cut/xad &> /1/ximm_tmp/cut/logs/xad.log &
+php es_indexer.php --postlines=900000 --ldpath=/1/ximm_tmp/cut/xae &> /1/ximm_tmp/cut/logs/xae.log &
+php es_indexer.php --postlines=900000 --ldpath=/1/ximm_tmp/cut/xaf &> /1/ximm_tmp/cut/logs/xaf.log &
+php es_indexer.php --postlines=900000 --ldpath=/1/ximm_tmp/cut/xag &> /1/ximm_tmp/cut/logs/xag.log &
+php es_indexer.php --postlines=900000 --ldpath=/1/ximm_tmp/cut/xah &> /1/ximm_tmp/cut/logs/xah.log &
+php es_indexer.php --postlines=900000 --ldpath=/1/ximm_tmp/cut/xai &> /1/ximm_tmp/cut/logs/xai.log &
+php es_indexer.php --postlines=900000 --ldpath=/1/ximm_tmp/cut/xaj &> /1/ximm_tmp/cut/logs/xaj.log &
+php es_indexer.php --postlines=900000 --ldpath=/1/ximm_tmp/cut/xak &> /1/ximm_tmp/cut/logs/xak.log &

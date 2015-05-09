@@ -1,0 +1,22 @@
+/home/ximm/petabox/sw/bin/se_indexer.php --qpath=/1/aa2 --queue=0 --ids=/1/ximm_tmp/cut/xaa ;
+/home/ximm/petabox/sw/bin/se_indexer.php --qpath=/1/aa2 --queue=0 --ids=/1/ximm_tmp/cut/xab ;
+/home/ximm/petabox/sw/bin/se_indexer.php --qpath=/1/aa2 --queue=0 --ids=/1/ximm_tmp/cut/xac ;
+/home/ximm/petabox/sw/bin/se_indexer.php --qpath=/1/aa2 --queue=0 --ids=/1/ximm_tmp/cut/xad ;
+/home/ximm/petabox/sw/bin/se_indexer.php --qpath=/1/aa2 --queue=0 --ids=/1/ximm_tmp/cut/xae ;
+/home/ximm/petabox/sw/bin/se_indexer.php --qpath=/1/aa2 --queue=0 --ids=/1/ximm_tmp/cut/xaf ;
+/home/ximm/petabox/sw/bin/se_indexer.php --qpath=/1/aa2 --queue=0 --ids=/1/ximm_tmp/cut/xag ;
+/home/ximm/petabox/sw/bin/se_indexer.php --qpath=/1/aa2 --queue=0 --ids=/1/ximm_tmp/cut/xah ;
+/home/ximm/petabox/sw/bin/se_indexer.php --qpath=/1/aa2 --queue=0 --ids=/1/ximm_tmp/cut/xai ;
+/home/ximm/petabox/sw/bin/se_indexer.php --qpath=/1/aa2 --queue=0 --ids=/1/ximm_tmp/cut/xaj ; 
+/home/ximm/petabox/sw/bin/se_indexer.php --qpath=/1/aa2 --queue=0 --ids=/1/ximm_tmp/cut/xak ;
+/home/ximm/petabox/sw/bin/se_indexer.php --qpath=/1/aa2 --queue=0 --ids=/1/ximm_tmp/cut/xal ;
+/home/ximm/petabox/sw/bin/se_indexer.php --qpath=/1/aa2 --queue=0 --ids=/1/ximm_tmp/cut/xam ;
+/home/ximm/petabox/sw/bin/se_indexer.php --qpath=/1/aa2 --queue=0 --ids=/1/ximm_tmp/cut/xan ;
+/home/ximm/petabox/sw/bin/se_indexer.php --qpath=/1/aa2 --queue=0 --ids=/1/ximm_tmp/cut/xao ;
+/home/ximm/petabox/sw/bin/se_indexer.php --qpath=/1/aa2 --queue=0 --ids=/1/ximm_tmp/cut/xap ;
+/home/ximm/petabox/sw/bin/se_indexer.php --qpath=/1/aa2 --queue=0 --ids=/1/ximm_tmp/cut/xaq ;
+/home/ximm/petabox/sw/bin/se_indexer.php --qpath=/1/aa2 --queue=0 --ids=/1/ximm_tmp/cut/xar ;
+/home/ximm/petabox/sw/bin/se_indexer.php --qpath=/1/aa2 --queue=0 --ids=/1/ximm_tmp/cut/xas ;
+/home/ximm/petabox/sw/bin/se_indexer.php --qpath=/1/aa2 --queue=0 --ids=/1/ximm_tmp/cut/xat ;
+/home/ximm/petabox/sw/bin/se_indexer.php --qpath=/1/aa2 --queue=0 --ids=/1/ximm_tmp/cut/xau ;
+/home/ximm/petabox/sw/bin/se_indexer.php --qpath=/1/aa2 --queue=0 --ids=/1/ximm_tmp/cut/xav
