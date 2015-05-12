@@ -34,7 +34,8 @@
                     }
                     
                     if ( isset( $col_vector ) )
-                        $outline = count( $col_vector ) . "\t" . $id . "\t" . json_encode( $col_vector );
+                        $outline = json_encode( Array( "_id"=>$id, "_source"=>Array( "collection"=>$col_vector)));
+//                        $outline = count( $col_vector ) . "\t" . $id . "\t" . json_encode( $col_vector );
                                     
                 } else {
 

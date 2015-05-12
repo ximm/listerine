@@ -1,6 +1,8 @@
 <?
 // Copyright(c)2005-(c)2015 Internet Archive. Software license GPL version 2.
 
+
+
 define('DEFAULT_GROUP_SIZE', 500);
 
 define('SE_PRINT_DONT_POST', isset($_SERVER['SE_PRINT_DONT_POST'])); // DEBUG mode or not! (set on cmd-line env before running CLI, etc.)
@@ -20,11 +22,14 @@ define('SE_PRINT_DONT_POST', isset($_SERVER['SE_PRINT_DONT_POST'])); // DEBUG mo
 
 class ESIndexer
 {
+
+  const SKIP_SUBS = FALSE;     //  leave true only for first pass of collection graph indexing!
   
   const MAX_FAVORITES = 10000;
   const ITEMS_LINE_DUMP = "/1/ximm_tmp/linedump-cleaned_combined.json";
 
-  public static $fields_of_interest = array(    'collection_reduced',
+  public static $fields_of_interest = array(    'members_original',
+                                                'collection_reduced',
                                                 'collection_expanded',
                                                 'list_reduced',
                                                 'list_expanded',
@@ -59,14 +64,17 @@ class ESIndexer
                   $lists[ $k ] = $v;  
 
         // TODO: add FLAG HERE TO DISABLE ATTEMPTED EXPANSION ON FIRST PASS
-        $lists[ 'sub_collection_expanded' ]     = Listerine::expand_subcollections( $id, Listerine::TYPE_COLLECTION );
-        $lists[ 'sub_list_expanded' ]           = Listerine::expand_subcollections( $id, Listerine::TYPE_LIST );   
-        $lists[ 'sub_set_expanded' ]            = Listerine::expand_subcollections( $id, Listerine::TYPE_SET );
 
+        if ( self::SKIP_SUBS===FALSE ) {
+            $lists[ 'sub_collection_expanded' ]     = Listerine::expand_subcollections( $id, Listerine::TYPE_COLLECTION );
+            $lists[ 'sub_list_expanded' ]           = Listerine::expand_subcollections( $id, Listerine::TYPE_LIST );   
+            $lists[ 'sub_set_expanded' ]            = Listerine::expand_subcollections( $id, Listerine::TYPE_SET );
+        }
+        
     } else {
 
         foreach ( $provided_value_dict as $k => $v )
-            if ( in_array($k, ESIndexer::$fields_of_interest_items ))
+            if ( in_array($k, ESIndexer::$fields_of_interest_item ))
                 if ( is_bool($v) )
                   $lists[ $k ] = strval( $v );
                 else
@@ -89,9 +97,6 @@ class ESIndexer
     $s=new Search(array('query'=>"identifier:$identifier", 'limit'=>0));
     return (int)($s->getInfo("total_nbr"));
   }
-
-  // name of ES index to operate on (note: queries via aliases)
-  private static $es_index = 'list-test';
 
   private static $post_xml='';
   private static $post_num=0;
@@ -878,7 +883,7 @@ class ESIndexer
         }
 
         $id = $doc['identifier'][0];
-        $doc_bulklines = self::get_es_bulklines_for_doc($id, $doc, self::$es_index, 'item', 3, false);
+        $doc_bulklines = self::get_es_bulklines_for_doc($id, $doc, Listerine::ES_INDEX, 'item', 3, false);
         $bulklines = array_merge($bulklines, $doc_bulklines);
       }
       else
@@ -943,7 +948,7 @@ class ESIndexer
   private static function get_membership_matches($list) {
     $ci = curl_init();
     curl_setopt($ci, CURLOPT_URL,
-                'http://es-lb:9200/' . self::$es_index . '/item/_search?q=listmemberships:'
+                'http://es-lb:9200/' . Listerine::ES_INDEX . '/item/_search?q=listmemberships:'
                 . $list . '&size=10000');
     curl_setopt($ci, CURLOPT_PORT, 9200);
     curl_setopt($ci, CURLOPT_TIMEOUT, 200);
@@ -1039,7 +1044,7 @@ class ESIndexer
     {
       $success = false;
       $doc = self::id2se($id, false, 0, $success, true);
-      $doc_bulklines = self::get_es_bulklines_for_doc($id, $doc, self::$es_index, 'item', 3, true);
+      $doc_bulklines = self::get_es_bulklines_for_doc($id, $doc, Listerine::ES_INDEX, 'item', 3, true);
       $bulklines = array_merge($bulklines, $doc_bulklines);
     }
 

@@ -1,17 +1,25 @@
 #!/usr/bin/env php
 <?
+// Copyright(c)2005-(c)2015 Internet Archive. Software license GPL version 2.
+
 /* require_once '/petabox/setup.inc'; */
 require_once '/home/ximm/petabox/setup.inc';
 require_once 'Console/CommandLine.php'; // um, part of PEAR
 
-require_once '/home/ximm/projects/search/ESIndexer.inc';
-require_once '/home/ximm/projects/search/Listerine.inc';
+require_once '/home/ximm/projects/search/listerine/ESIndexer.inc';
+require_once '/home/ximm/projects/search/listerine/Listerine.inc';
 
-// Elasticsearch Linedump indexer
+// Elasticsearch linedump indexer
 //
-// read a line dump from collections graph processing, and post the results to an ES index
-// cannabalized from se_indexer.php, with queue interactions stripped out
+// Read a line dump from collections graph processing, post the item with provided calculated fields to an ES index
+//   relies on  ESIndexer.php::get_custom_collections()
+// cannabalized from se_indexer.php, with queue interactions stripped out and replaced by read of JSON linedump
+
+// NOTE
+//      this indexzer is intended for bootstrapping an index only; queue must be used once index is up
+
 // TODO:
+//      if --postlines exceeds available lines, process never quits
 //      abstract line parsing, so can be used with any line-dump based single-shot indexing task
 
 

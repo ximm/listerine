@@ -1,5 +1,15 @@
 #!/bin/python
+# Copyright(c)2005-(c)2015 Internet Archive. Software license GPL version 2.
 
+# TODO:     see goodeati1951 vs GoodEati1951 in Brewster's favorites - analyzer for members and list_reduced converts to lowercase,
+#                but
+#                   filter-term-"members":goodeati1951      FAILS
+#                   filter-term-"members":GoodEati1951      WORKS -  25 hits and counting
+#
+# TODO:     whitespace tokenizer in ES breaks on - which makes fav-brewster tokenize into fav, brewster, and not match fav-brewster
+#                * because index was not created with poke_es.py update for applying textBar analyzer to new collection fields
+#                * QED must create new index with poke_es.py AND PAY ATTENTION TO ANALYZERS ASSIGNED TO FIELDS
+#
 # TODO:     consider making sub-collections and ancestors vectors include self to simplify ES DSL queries performed by Listerine
 # TODO:     compute invalidations (reindexing lists)
 # TODO:     possible optimization: caching all collection data in separate non-sharded index with copy on every node
@@ -195,64 +205,17 @@ class cgraph:
 
         else:
 
-            # raw dump from elasticdump, see DUMP_LIST_DATA.sh
+            # raw dump from elasticdump, see DUMP_LIST_DATA.sh            
+            print "Importing dump %s" % linedump_filename
+            self.private_import_linedump( linedump_filename )
+
+            # after processing items, we end up with dangling pointers from items missing in dump
+            # these are processed from .procfile to TO_INDEX, which can then be enumerated in an addendum file via PROCFAIL_TO_INDEX.sh | scrape_missing_collections.py
             
-            with codecs.open( linedump_filename, encoding='utf-8', mode='r' ) as read_handle:
-                for rln in read_handle:
-                    ln = rln.strip()
-                    try:
-                        if ln[0] == ",":
-                            res = json.loads( ln[1:] )
-                        elif ln[0] == "{":
-                            res = json.loads( ln )
-                        else:
-                            badline
-                    except:
-                        print "Skipping %s" % ln
-                        continue            
-
-                    identifier          = res["_id"]
-                    src                 = res["_source"]
-
-                    exclude_me = False
-
-                    if "mediatype" not in src.keys():
-                        print "NO MEDIA TYPE? Skipping %s" % ln
-                        continue            
-                    else:                
-                        media_type  = src["mediatype"]
-                    if is_list( media_type ):
-                        if len( media_type) == 1:
-                            media_type = media_type[0]
-                        else:
-                            print "BAD MEDIA TYPE? Skipping %s" % ln
-                            continue            
-
-                    if "collection" not in src.keys():
-                        original_collection_vector = []                    
-                    else:    
-                        original_collection_vector = src["collection"]
-                        if is_list( original_collection_vector ) is False:
-                            original_collection_vector = [ original_collection_vector ]
-                        
-                    if "members" not in src.keys():
-                        original_members_vector = []                    
-                    else:    
-                        original_members_vector = src["members"]
-                        if is_list( original_members_vector ) is False:
-                            original_members_vector = [ original_members_vector ]                    
-
-                    filtered_members_vector = [ m for m in original_members_vector if is_favorite_list( m ) ]
-
-                    if self.has_node_named( identifier ):
-                        node = self.get_node_named( identifier )
-                        node.set_original_collection_vector( original_collection_vector )
-                    else:                
-                        node = self.add_node( identifier, original_collection_vector )
-
-                    node.set_original_members( original_members_vector )
-                    node.set_filtered_members( filtered_members_vector )
-
+            addendum_file = linedump_filename + "_ADDENDUM"
+            if file_exists( addendum_file ):
+                print "Importing addendum %s" % addendum_file
+                self.private_import_linedump( addendum_file )
 
             # now compute filtered vector for each node
             # filtered means, of type collection: ie those nodes we have, or, other favorites lists
@@ -261,6 +224,64 @@ class cgraph:
                 filtered_members_vector = [ m for m in node.get_original_members() if ( is_favorite_list( m ) or self.has_node_named( m )) ]
                 node.set_filtered_members( filtered_members_vector )
                     
+
+    def private_import_linedump( self, linedump_filename ):
+        with codecs.open( linedump_filename, encoding='utf-8', mode='r' ) as read_handle:
+            for rln in read_handle:
+                ln = rln.strip()
+                try:
+                    if ln[0] == ",":
+                        res = json.loads( ln[1:] )
+                    elif ln[0] == "{":
+                        res = json.loads( ln )
+                    else:
+                        badline
+                except:
+                    print "Skipping %s" % ln
+                    continue            
+
+                identifier          = res["_id"]
+                src                 = res["_source"]
+
+                exclude_me = False
+
+                if "mediatype" not in src.keys():
+                    print "NO MEDIA TYPE? Skipping %s" % ln
+                    continue            
+                else:                
+                    media_type  = src["mediatype"]
+                if is_list( media_type ):
+                    if len( media_type) == 1:
+                        media_type = media_type[0]
+                    else:
+                        print "BAD MEDIA TYPE? Skipping %s" % ln
+                        continue            
+
+                if "collection" not in src.keys():
+                    original_collection_vector = []                    
+                else:    
+                    original_collection_vector = src["collection"]
+                    if is_list( original_collection_vector ) is False:
+                        original_collection_vector = [ original_collection_vector ]
+                    
+                if "members" not in src.keys():
+                    original_members_vector = []                    
+                else:    
+                    original_members_vector = src["members"]
+                    if is_list( original_members_vector ) is False:
+                        original_members_vector = [ original_members_vector ]                    
+
+                filtered_members_vector = [ m for m in original_members_vector if is_favorite_list( m ) ]
+
+                if self.has_node_named( identifier ):
+                    node = self.get_node_named( identifier )
+                    node.set_original_collection_vector( original_collection_vector )
+                else:                
+                    node = self.add_node( identifier, original_collection_vector )
+
+                node.set_original_members( original_members_vector )
+                node.set_filtered_members( filtered_members_vector )
+
 
 # NOTE: some node references in sets are text strings corresponding to the node.name of other nodes, nodes DO NOT collect arrays of other cnode objects
 
@@ -624,7 +645,7 @@ class cnode:
 
 
 def is_favorite_list(v):
-    return (len(v) > 4) and ( v[0:4] == "fav-" )
+    return (len(v) > 4) and (( v[0:4] == "fav-" ) or ( v[0:4] == "fav." ))
 
 def is_list(v):
    return ( hasattr(v, '__iter__') and not isinstance(v, basestring) )

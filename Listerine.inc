@@ -29,6 +29,7 @@
                 
     Relies on fields in Elasticsearch documents, in Listerine::ES_INDEX only, not archive-all variants yet:
 
+    TODO: list API features must be rewritten to support new enhanced graph built for:
     TODO: nested enumerated list support
         * working on now, requires paralleization of list/collection hanlding
           i.e. items must be indexed with their list_reduced just as they have collection_reduced 
@@ -81,7 +82,7 @@
     
         "collections"                       on-disk metadata collection vector
 
-    Synthesized indexed fields, source of truth is users table in DB:       
+    Preexisting synthesized fields, source of truth is users table in DB:
     
         "listmemberships"                   those lists (fav- currently) to which item belongs
         "members"                           enumeration of members.json of a list (currently fav- )
@@ -102,7 +103,7 @@
         "list_expanded"                     fully expanded set of lists to which item belongs, determinable from lists_reduced
         "sub_list_expanded"                 fully expanded set of sublists, to which item belong
 
-        "members"                           enumeration of members.json of a list, SYMMETRICAL WITH LIST_REDUCED
+        "members_original"                  enumeration of members.json of a list, SYMMETRICAL WITH LIST_REDUCED; UNANALYZED version
         
       combined expansion support
         
@@ -128,7 +129,7 @@ define ('LISTERINE_DEBUG_OUTPUT',       false );
 class Listerine
 {
 
-    const   ES_INDEX =          'list-test';
+    const   ES_INDEX =          'listerine';
 
     const   TYPE_COLLECTION =   'collection';
     const   TYPE_LIST =         'list';
@@ -260,7 +261,7 @@ GET list-test/_search?search_type=count
                             "filter" =>  Array(
                                 "bool" =>  Array(
                                     "should" => Array(  
-                                        Array( "term"  => Array( "members" => $id )),
+                                        Array( "term"  => Array( "members_original" => $id )),
                                         Array( "terms" => Array( "collection_reduced" =>
                                                                 Array(  "index" =>  Listerine::ES_INDEX,
                                                                         "type"  =>  "item",
@@ -285,9 +286,9 @@ GET list-test/_search?search_type=count
         
     } else {
     
-            // unexpanded (only children), all items
+        // unexpanded (only children), all items
 
-            $query_obj[ "filter" ] = Array( "term"  => Array( "members" => $id ));
+        $query_obj[ "filter" ] = Array( "term"  => Array( "members_original" => $id ));
 
     }
 
@@ -327,7 +328,7 @@ GET list-test/_search?search_type=count
 
                 // all items whose 
                 //      mediatype = collection, AND,
-                //          whose identifier appears in 'members' field of list $id, OR,
+                //          whose identifier appears in 'members_original' field of list $id, OR,
                 //          whose collection_reduced vector includes at least one collection in the expanded subcollections list of this list
 
                 $query_obj[ "query" ] = Array(
@@ -352,7 +353,7 @@ GET list-test/_search?search_type=count
                                                                     Array(  "index" =>  Listerine::ES_INDEX,
                                                                             "type"  =>  "item",
                                                                             "id"    =>  $id,
-                                                                            "path"  =>  "members" ),
+                                                                            "path"  =>  "members_original" ),
                                                                     ),                                                    
                                                             ),  // terms
                                                          ),     // should
@@ -365,8 +366,9 @@ GET list-test/_search?search_type=count
 
             } else {
 
-                // all items whose identifier appears in 'members-expanded' field of list $id
+                // all items whose identifier appears in 'members_expanded' field of list $id
 
+            // TODO: simple query matching ids in members_expanded field
                 
                             
             }
@@ -376,7 +378,7 @@ GET list-test/_search?search_type=count
 
             if ( LISTERINE_RUNTIME_EXPANSION ) {
 
-                // all items whose identifier appears in 'members' field of list $id, and,
+                // all items whose identifier appears in 'members_original' field of list $id, and,
                 // all items whose collection_reduced vector includes at least one collection in the expanded subcollections list of this list
 
                 $query_obj[ "query" ] = Array(
@@ -396,7 +398,7 @@ GET list-test/_search?search_type=count
                                                                     Array(  "index" =>  Listerine::ES_INDEX,
                                                                             "type"  =>  "item",
                                                                             "id"    =>  $id,
-                                                                            "path"  =>  "members" ),
+                                                                            "path"  =>  "members_original" ),
                                                                     ),                                                    
                                                         ),  // terms
                                                      ),     // should
@@ -428,7 +430,7 @@ GET list-test/_search?search_type=count
 
             // all items
             //   whose mediatype = collection, AND
-            //   whose identifier appears in 'members' field of list $id
+            //   whose identifier appears in 'members_original' field of list $id
 
             $query_obj[ "query" ] = Array(
                             "filtered" =>  Array(
@@ -439,7 +441,7 @@ GET list-test/_search?search_type=count
                                                                 Array(  "index" =>  Listerine::ES_INDEX,
                                                                         "type"  =>  "item",
                                                                         "id"    =>  $id,
-                                                                        "path"  =>  "members" ),
+                                                                        "path"  =>  "members_original" ),
                                                                 ),
                                                             ),  // terms 
                                                      ),     // must
@@ -683,7 +685,7 @@ GET list-test/_search?search_type=count
         if ( $expanded )
             $members_field = "members_expanded";
         else
-            $members_field = "members";
+            $members_field = "members_original";
 
         
         $query_obj = Array(     "_source"   =>  Array(  $members_field ),
@@ -983,38 +985,6 @@ GET list-test/_search?search_type=count
             
         return $vector_field;
         
-  }
-  
-  
-  private static function get_membership_matches($list) {
-    $ci = curl_init();
-    curl_setopt($ci, CURLOPT_URL,
-                'http://es-lb:9200/' . Listerine::ES_INDEX . '/item/_search?q=listmemberships:'
-                . $list . '&size=10000');
-    curl_setopt($ci, CURLOPT_PORT, 9200);
-    curl_setopt($ci, CURLOPT_TIMEOUT, 200);
-    curl_setopt($ci, CURLOPT_RETURNTRANSFER, 1);
-    curl_setopt($ci, CURLOPT_FORBID_REUSE, 0);
-    curl_setopt($ci, CURLOPT_CUSTOMREQUEST, 'GET');
-    /* curl_setopt($ci, CURLOPT_CUSTOMREQUEST, 'POST'); */
-/*     $post = ' */
-/* { */
-/*   "query" : { */
-/*         "term" : { "listmemberships": "' . $list . '"} */
-/*     } */
-/* }'; */
-/*     curl_setopt($ci, CURLOPT_POSTFIELDS, $post); */
-
-    $response = curl_exec($ci);
-
-    echo $response . "\n";
-
-    $matches_doc = json_decode($response, 1);
-    $match_ids = array();
-    foreach($matches_doc['hits']['hits'] as $hit) {
-      $match_ids[] = $hit['_id'];
-    }
-    return $match_ids;
   }
 
 }
