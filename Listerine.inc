@@ -5,19 +5,31 @@
 
     That minty fresh new perspective on the collections graph and lists. Ahhhhhhhhhhhh...    
 
-    Goal: answer questions about collection and list membership in a performant, truthful manner.
+    Goal: answer questions about collection and list membership in a performant, truthful, maintainable manner.
     
-    Performant means:   amoratized cost of queries supports V2-level load, and fast responses ( < 50ms ideally)
-    Truthful means:     collection and list membership accurately reflects documents as indexed, not on disk metadata;
-                        documents are indexed in near-real-time (minutes latency max);
-                        will NOT support 'look ahead' for pending catalog tasks
+    Performant means:       amoratized cost of queries supports V2-level load, and fast responses ( < 50ms ideally)
+
+    Truthful means:         collection and list membership accurately reflects documents as indexed, not on disk metadata;
+                            documents are indexed in near-real-time (minutes latency max);
+                            will NOT support 'look ahead' for pending catalog tasks
+
+    Maintainable means:     indexing overhead is mostly limited to updates to the COLLECTIONS GRAPHS.
+                            changes in list membership or collection parentage invalidate only records in parent and children collections
+                            changes in the collection graph only necessitate reindexing of items when items are added/removed from lists
+                            otherwise, items appear in results automatically as a result of their _reduced vectors matching updated sub_<>_expanded vectors                    
     
 
-    Notes:  1. on-disk collection vectors are expanded, but are incomplete and graph is somewhatbroken
-            2. corrected collection_expanded can be computed given asccurate collection_reduced vectors
-            3. collection_reduced vectors are distillable from existing expanded vectors, but:
+    Notes:  
+    
+            COLLECTIONS
+            
+            1. status quo on-disk 'collection' vectors are expanded, but are sometimes incomplete, and graph is somewhat broken
+            2. normalized collection_expanded vectors can be computed, given accurate graph comprising collection_reduced vectors
+            3. collection_reduced vectors are distillable from existing on disk vectors, but:
                 3b. doing so REQUIRES multi-pass analysis of expanded vectors for collection items,
-                    this is currently performed via col_graph.py or similar PRIOR TO INITIAL INDEXING
+                    this is currently performed via col_graph.py
+                    results BOOTSTRAP the collection graph, which much happen PRIOR TO ITEM INDEXING
+                    calculation of item reduced vectors is also currently done in col_graph.py, using the collection graph
             4. once reduced vectors are properly indexed, collection_expanded vectors MUST be cached for collection and list items
             5. cached == indexed with appropriate fields in document, as documented
 
@@ -26,18 +38,34 @@
             6. truthful answers require accurate collection_expanded vectors
 
             7. sole source of truth for list membership is currently favorites lists in users table
+
+            LISTS
+            
+            1. status quo on-disk favorites lists are stored in users table, cached in members.json in items
+            2. to support queries, we invert membership to list_reduced (parent list==listmembership) and cache resulting graph in parallel with collection graph
+            3. list membership is hence cached in two places: 
+                3a. implied in parentage (list_reduced)
+                3b. ordering is preserved in the enumeration in 'members_original' in list collection items
+            4. list_expanded and sub_list_expanded cache list graph to support queries for access to inherited membership 
+        
+            SETS
+        
+            1. sets are the recursive deep union of collection and list membership
+            2. this union is [much] larger than the simple union of the pre-computed _expanded collection and list vectors 
+            3. this union represents the combined inherited inclusion of items in lists and collections through either path
+                3a. ie. reveals items I1-N in collection C2 which is in collection C1 which is in favorites list L1
+                3b. ie. reveals items I1-N in collection C3 which is in favorites list L2 which is in favorites list L1
+                etc.
+            4. this union may require trimming heuristics in the future, as favoriting top-level collections requires
+            
                 
     Relies on fields in Elasticsearch documents, in Listerine::ES_INDEX only, not archive-all variants yet:
 
-    TODO: list API features must be rewritten to support new enhanced graph built for:
-    TODO: nested enumerated list support
-        * working on now, requires paralleization of list/collection hanlding
-          i.e. items must be indexed with their list_reduced just as they have collection_reduced 
+    TODO: invalidation/to-re-index list generation and catalog done following
+
     TODO: optimize by caching list graph (subset with all mediatype=collection) in one-shard DB, one copy per node, for fast lookups      
         * requires maintaining truth in two locations redundantly; we must support mixed-type results 
-    TODO: list ordering (and other list memebership edge metadata)        * 
-    TODO: sets API 'side channel' combining list/collection cache
-    TODO: invalidation/to-re-index list generation and catalog done following
+    TODO: expose list ordering preserved in members_original
     TODO: search collection support (Lucene query passthru?)
         * we will be able to answer membership of this collection questions (give all members, expanded or not)
         * we will NOT be able to answer collection memberships of this item queries without cached expansions of all items
@@ -55,7 +83,7 @@
                                             this is currently done by analyzing all collection metadata via col_graph.py, whose
                                             output is a dump of reduced and [sample] corrected expanded vectors for all collections
                                         
-                                            IN FUTURE, when we have collection_reduced vector in metadata ground truth,
+                                            IN THE FUTURE, when we have collection_reduced vector in metadata ground truth,
                                             one need only perform a one of these processes:
 
                                                 TWO STEP INDEX ONLY PROCESS                                            
@@ -68,19 +96,15 @@
         
         lists                               CURRENTLY, only use of lists is fav- items. Source of truth is user-table.
                     
-                                            IN FUTURE, list items (collections with members.json) will exist as well.
+                                            IN THE FUTURE, list items (collections with members.json) will exist as well.
                                             
                                             For now, list vectors may be computed using processes symmetric with the 'future' case above,
                                             because we do not use 
-                                             
-        
-            
-                    
 
 
     Preexisting fields, source of truth is item metadata:
     
-        "collections"                       on-disk metadata collection vector
+        "collection"                        on-disk metadata collection vector
 
     Preexisting synthesized fields, source of truth is users table in DB:
     
@@ -103,6 +127,8 @@
         "list_expanded"                     fully expanded set of lists to which item belongs, determinable from lists_reduced
         "sub_list_expanded"                 fully expanded set of sublists, to which item belong
 
+        "list_expanded_accurately"          Boolean: whether calculated expanded vector is believed accurate (coherent and connected)
+
         "members_original"                  enumeration of members.json of a list, SYMMETRICAL WITH LIST_REDUCED; UNANALYZED version
         
       combined expansion support
@@ -111,15 +137,10 @@
         "set_expanded"                      union of collection_expanded and list_expanded
         "sub_set_expanded"                   union of sub_collection_expanded and sub_list_expanded
         
-      theoretical, not calculated; only for index-time expansion case
-      
-        "members_expanded"                  enumeration of members.json plus members of any member of any collection in members.json (and their subcollections)
-
 */
 
 # runtime switches
 
-define ('LISTERINE_RUNTIME_EXPANSION',  true );
 define ('LISTERINE_NOCACHING',          true );
 
 define ('LISTERINE_DEBUG_OUTPUT',       false );
@@ -175,42 +196,38 @@ class Listerine
 
         get_facets_for_list( $bucket_term='collection_reduced'  )
 
-Sample native Elasticsearch DSL query to return facets (collection membership) for all members of 'americana' 
 
-GET list-test/_search?search_type=count
-{
-  "aggregations" : {
-    "facets": {
-      "terms": {
-        "field": "collection_reduced"
-      }
-    }
-  },
-  "query" : {
-    "filtered" : {
-      "filter" : {
-        "bool": {
-          "should": [ 
-            { "terms" : {
-                "collection_reduced" : {
-                  "index" : "list-test",
-                  "type": "item",
-                  "id" : "americana",
-                  "path" : "sub_collection_expanded"
-                },
-                "_cache": "americana_expanded_items"
-              }
-            },
-            { "term": { "collection_reduced":"americana" } }
-          ]
-        }
-      }
-    }
-  }
-}
+    SETS
 
 
+        get_sets_for_item( $id, $expanded=true )
+            expanded            include membership by virtue of ancestors being on a set
 
+            * relies on caching of sub_collection_expanded for all sets
+
+        in_set_P( $id, $set )
+        
+        get_items_in_set( $id, $expanded=false, $collections_only=false )
+            expanded            include members of all subcollections
+            collections_only    filter so only collections are returned 
+
+            * relies on caching of sub_collection_expanded for all collections and sets
+            * relies on caching of members_expanded for all sets
+
+        get_facets_for_set( $bucket_term='collection_reduced'  )
+
+    GRAPH OPERATIONS
+
+        expand_subcollections( $id, $list_type=Listerine::TYPE_COLLECTION )
+            * assumes _expanded vectors have been INDEXED, works by ES query        
+        expand_ancestors( $id, $list_type=Listerine::TYPE_COLLECTION, &$ancestor_list=Array() )
+            * recursive function computing _expanded vectors, ASSUMES _reduced have been bootstrapped into a coherent graph
+    
+        invalidation_list_for_collection( $id, $calculate_delta=false )         
+        invalidation_list_for_item( $id, $calculate_delta=false )
+
+            * invalidation functions provide lists of identifiers to re-index, when collection/list preoperties of $id change
+            
   */
 
 
@@ -219,256 +236,70 @@ GET list-test/_search?search_type=count
 */
 
   // ancestors only, does NOT include subcollections or self if collection
-  public static function get_collections_for_item( $id, $expanded=true  ) 
-  {
-    return Listerine::get_upward_vector_for_item( $id, Listerine::TYPE_COLLECTION, $expanded ) ; 
-  }
+    public static function get_collections_for_item( $id, $expanded=true  ) 
+    {
+        return Listerine::get_upward_vector_for_item( $id, Listerine::TYPE_COLLECTION, $expanded ) ; 
+    }
 
-  public static function in_collection_P( $id, $collection  ) 
-  {
-    $item_collections = Listerine::get_upward_vector_for_item( $id, Listerine::TYPE_COLLECTION, true );
-    return in_array( $collection, $item_collections );    
-  }
+    public static function get_original_collections_for_item( $id ) 
+    {
+
+        $rep = Metadata::get_obj_part(   $id,
+                                        'metadata/collection',
+                                        array("authed"=>TRUE,
+                                        'primaryonly'=>FALSE) );
+                                                
+        try {
+
+            $original_collection = (Array)$rep[ "result" ];
+        
+        } catch (Exception $e) {
+
+            $original_collection = false;
+        
+        }
+
+        return $original_collection;
+    }
+
+
+    public static function in_collection_P( $id, $collection  ) 
+    {
+        $item_collections = Listerine::get_upward_vector_for_item( $id, Listerine::TYPE_COLLECTION, true );
+        return in_array( $collection, $item_collections );    
+    }
   
-  public static function get_items_in_collection( $id, $expanded=false, $collections_only=false ) 
-  {
-    return Listerine::get_downward_membership_for_item( $id, $list_type=Listerine::TYPE_COLLECTION, $expanded, $collections_only ); 
-  }
+    public static function get_items_in_collection( $id, $expanded=false, $collections_only=false ) 
+    {
+        return Listerine::get_downward_membership_for_item( $id, Listerine::TYPE_COLLECTION, $expanded, $collections_only ); 
+    }
+
+    public static function get_facets_for_collection( $id, $expanded=false, $bucket_term='collection_reduced' )
+    {
+        return Listerine::get_facets( $id, $expanded, $list_type=Listerine::TYPE_COLLECTION, $bucket_term ); 
+    }
 
 
 /*
     ------------------LIST INTERFACE-----------------------------------------   
 */
-  
-  public static function get_lists_for_item( $id, $expanded=true  )
-  {
 
-    if ( $expanded ) {
-
-        $query_obj = Array(     "_source"   =>  false,
-                                "from"      =>  0,
-                                "size"      =>  50,
-                            );
-    
-        if ( LISTERINE_RUNTIME_EXPANSION ) {
-
-            //  all lists whose members field includes $id, and, 
-            //  all lists whose expanded list of subcollections* includes at least one member of $id's collection_reduced vector
-            //    *  summed over collection members                        
-
-            $query_obj[ "query" ] = Array(
-                        "filtered" =>  Array(
-                            "filter" =>  Array(
-                                "bool" =>  Array(
-                                    "should" => Array(  
-                                        Array( "term"  => Array( "members_original" => $id )),
-                                        Array( "terms" => Array( "collection_reduced" =>
-                                                                Array(  "index" =>  Listerine::ES_INDEX,
-                                                                        "type"  =>  "item",
-                                                                        "id"    =>  $id,
-                                                                        "path"  =>  "sub_collection_expanded" ),
-//                                                                  "_cache"  =>  "expanded_lists_" . $id,
-                                                                ),                                                    
-                                                    ),  // terms
-                                                 ),     // should
-                                             ),         // bool
-                                         ),             // filter
-                                     ),                 // filtered
-                                 );                     // query
-
-        } else {
-
-            //  all lists whose members_expanded field includes $id
-
-            $query_obj[ "filter" ] = Array( "term"  => Array( "members_expanded" => $id ));
-
-        }
-        
-    } else {
-    
-        // unexpanded (only children), all items
-
-        $query_obj[ "filter" ] = Array( "term"  => Array( "members_original" => $id ));
-
+    // ancestors only, does NOT include subcollections or self if collection
+    public static function get_lists_for_item( $id, $expanded=true  ) 
+    {
+        return Listerine::get_upward_vector_for_item( $id, Listerine::TYPE_LIST, $expanded ) ; 
     }
 
-    $query = json_encode( $query_obj );
-                    
-    list( $result_count, $lists ) = Listerine::get_hits( $query );
-        
-    return $lists;
-    
-  }
-
-
-  public static function in_list_P( $id, $list  ) 
-  {
-
-    $item_lists = Listerine::get_lists_for_item( $id, true );
-    return in_array( $list, $item_lists );
-    
-  }
-
+    public static function in_list_P( $id, $collection  ) 
+    {
+    $item_collections = Listerine::get_upward_vector_for_item( $id, Listerine::TYPE_LIST, true );
+        return in_array( $collection, $item_collections );    
+    }
   
-  public static function get_items_in_list( $id, $expanded=false, $collections_only=false ) 
-  {
-
-    $query_obj = Array(     "_source"   =>  false,
-                            "from"      =>  0,
-                            "size"      =>  50,
-                        );
-  
-    if ( $expanded ) {
-
-        if ( $collections_only ) {
-
-            // expanded, only collections
-            
-            if ( LISTERINE_RUNTIME_EXPANSION ) {
-
-                // all items whose 
-                //      mediatype = collection, AND,
-                //          whose identifier appears in 'members_original' field of list $id, OR,
-                //          whose collection_reduced vector includes at least one collection in the expanded subcollections list of this list
-
-                $query_obj[ "query" ] = Array(
-                            "filtered" =>  Array(
-                                "filter" =>  Array(
-                                    "bool" =>  Array(
-                                    
-                                        "must" => Array(
-                                            Array( "term"  => Array( "mediatype" => "collection" )), 
-                                                        ),      // must
-
-                                        "should" => Array(
-                                            Array( "terms" => Array( "collection_reduced" =>
-                                                                    Array(  "index" =>  Listerine::ES_INDEX,
-                                                                            "type"  =>  "item",
-                                                                            "id"    =>  $id,
-                                                                            "path"  =>  "sub_collection_expanded" ),
-//                                                                      "_cache"  =>  "expanded_items_" . $id,
-                                                                    ),                                                    
-                                                            ),  // terms
-                                            Array( "terms" => Array( "id" =>
-                                                                    Array(  "index" =>  Listerine::ES_INDEX,
-                                                                            "type"  =>  "item",
-                                                                            "id"    =>  $id,
-                                                                            "path"  =>  "members_original" ),
-                                                                    ),                                                    
-                                                            ),  // terms
-                                                         ),     // should
-
-                                                 ),         // bool
-                                             ),             // filter
-                                         ),                 // filtered
-                                     );                     // query
-
-
-            } else {
-
-                // all items whose identifier appears in 'members_expanded' field of list $id
-
-            // TODO: simple query matching ids in members_expanded field
-                
-                            
-            }
-        } else {
-
-            // expanded, all items
-
-            if ( LISTERINE_RUNTIME_EXPANSION ) {
-
-                // all items whose identifier appears in 'members_original' field of list $id, and,
-                // all items whose collection_reduced vector includes at least one collection in the expanded subcollections list of this list
-
-                $query_obj[ "query" ] = Array(
-                            "filtered" =>  Array(
-                                "filter" =>  Array(
-                                    "bool" =>  Array(
-                                        "should" => Array(  
-                                            Array( "terms" => Array( "collection_reduced" =>
-                                                                    Array(  "index" =>  Listerine::ES_INDEX,
-                                                                            "type"  =>  "item",
-                                                                            "id"    =>  $id,
-                                                                            "path"  =>  "sub_collection_expanded" ),
-//                                                                      "_cache"  =>  "expanded_items_" . $id,
-                                                                    ),                                                    
-                                                        ),  // terms
-                                            Array( "terms" => Array( "id" =>
-                                                                    Array(  "index" =>  Listerine::ES_INDEX,
-                                                                            "type"  =>  "item",
-                                                                            "id"    =>  $id,
-                                                                            "path"  =>  "members_original" ),
-                                                                    ),                                                    
-                                                        ),  // terms
-                                                     ),     // should
-                                                 ),         // bool
-                                             ),             // filter
-                                         ),                 // filtered
-                                     );                     // query
-
-
-                $query = json_encode( $query_obj );
-                
-                list( $result_count, $hits ) = Listerine::get_hits( $query );
-
-
-            } else {
-
-                $lists = Listerine::get_raw_members_vector( $id, true );
-                $result_count = count( $lists );
-                                            
-            }
-
-        }
-    
-    } else {
-
-        // unexpanded (only children), only collections
-    
-        if ( $collections_only ) {
-
-            // all items
-            //   whose mediatype = collection, AND
-            //   whose identifier appears in 'members_original' field of list $id
-
-            $query_obj[ "query" ] = Array(
-                            "filtered" =>  Array(
-                                "filter" =>  Array(
-                                    "bool" =>  Array(
-                                        "must"  =>  Array(  Array( "term"  => Array( "mediatype" => "collection" )),
-                                                            Array( "terms" => Array( "id" =>
-                                                                Array(  "index" =>  Listerine::ES_INDEX,
-                                                                        "type"  =>  "item",
-                                                                        "id"    =>  $id,
-                                                                        "path"  =>  "members_original" ),
-                                                                ),
-                                                            ),  // terms 
-                                                     ),     // must
-                                                 ),         // bool
-                                             ),             // filter
-                                         ),                 // filtered
-                                     );                     // query
-
-            $query = json_encode( $query_obj );
-                            
-            list( $result_count, $hits ) = Listerine::get_hits( $query );
-
-        } else {
-    
-            // unexpanded (only children), all items
-
-            $lists = Listerine::get_raw_members_vector( $id );
-            $result_count = count( $lists );
-
-        }
-
-    }    
-            
-    return Array( $result_count, $hits );
-    
-  }
-
+    public static function get_items_in_list( $id, $expanded=false, $collections_only=false ) 
+    {
+        return Listerine::get_downward_membership_for_item( $id, Listerine::TYPE_LIST, $expanded, $collections_only ); 
+    }
 
     // for now, lists are limited to user favorites, the source of truth of which is the users table
     public static function get_favorites_lists_for_item( $id )
@@ -483,61 +314,88 @@ GET list-test/_search?search_type=count
         }
     }
 
-    
+   public static function get_facets_for_list( $id, $expanded=false, $bucket_term='list_reduced' )
+    {
+        return Listerine::get_facets( $id, $expanded, $list_type=Listerine::TYPE_LIST, $bucket_term ); 
+    }
+
+/*
+    ------------------SET INTERFACE-----------------------------------------   
+*/
+
+  // ancestors only, does NOT include subcollections or self if collection
+    public static function get_sets_for_item( $id, $expanded=true  ) 
+    {
+        return Listerine::get_upward_vector_for_item( $id, Listerine::TYPE_SET, $expanded ) ; 
+    }
+
+    public static function in_set_P( $id, $collection  ) 
+    {
+        $item_collections = Listerine::get_upward_vector_for_item( $id, Listerine::TYPE_SET, true );
+        return in_array( $collection, $item_collections );    
+    }
+  
+    public static function get_items_in_set( $id, $expanded=false, $collections_only=false ) 
+    {
+        return Listerine::get_downward_membership_for_item( $id, $Listerine::TYPE_SET, $expanded, $collections_only ); 
+    }
+
+  public static function get_facets_for_set( $id, $expanded=false, $bucket_term='set_reduced' )
+    {
+        return Listerine::get_facets( $id, $expanded, $list_type=Listerine::TYPE_SET, $bucket_term ); 
+    }    
  
-  /*
-  
+ 
+ 
+    /*
+
     PRIVATE  
-  
-  */
 
-  // ancestors only, does NOT include subcollections or self if collection type
-  private static function get_upward_vector_for_item( $id, $list_type=Listerine::TYPE_COLLECTION, $expanded=true  ) 
-  {
+    */
 
-    if ( $expanded )
+    // ancestors only, does NOT include subcollections or self if collection type
+    private static function get_upward_vector_for_item( $id, $list_type=Listerine::TYPE_COLLECTION, $expanded=true  ) 
+    {
+
+        if ( $expanded )
     
-        if ( LISTERINE_RUNTIME_EXPANSION )
-
             $vector = Listerine::expand_ancestors( $id, $list_type );
-
+        
         else
-
-            $vector = Listerine::get_raw_upward_vector_for_item( $id, $list_type, true );
+    
+            // unexpanded
         
-    else
+            $vector = Listerine::get_raw_upward_vector_for_item( $id, $list_type );         // default is reduced
     
-        // unexpanded
-        
-        $vector = Listerine::get_raw_upward_vector_for_item( $id, $list_type );         // default is reduced
+        return $vector;
     
-    return $vector;
+    }
+
+    // TODO: implement scanning and/or paging
+    // TODO: support sorting
+    private static function get_downward_membership_for_item( $id, $list_type=Listerine::TYPE_COLLECTION, $expanded=false, $collections_only=false ) 
+    {
     
-  }
+        $query_obj = Array(     "_source"   =>  false,
+                                "from"      =>  0,
+                                "size"      =>  2000,
+                            );
 
-  // TODO: implement scanning and/or paging
-  // TODO: support sorting
-  public static function get_downward_membership_for_item( $id, $list_type=Listerine::TYPE_COLLECTION, $expanded=false, $collections_only=false ) 
-  {
-    
-    $query_obj = Array(     "_source"   =>  false,
-                            "from"      =>  0,
-                            "size"      =>  50,
-                        );
+        if ( $expanded ) {
 
-    if ( $expanded ) {
+            //
+            // EXPANDED
+            //
 
-        if ( $collections_only ) {
+            if ( $collections_only ) {
 
-            // expanded, only collections
+                // expanded, only collections
             
-            $hits = Listerine::expand_subcollections( $id );
+                $hits = Listerine::expand_subcollections( $id );
 
-        } else {
+            } else {
 
-            // expanded, all items
-
-            if ( LISTERINE_RUNTIME_EXPANSION ) {
+                // expanded, all items
 
                 $vector_field = Listerine::get_field_name( $list_type, false );
 
@@ -553,7 +411,7 @@ GET list-test/_search?search_type=count
                                                                             "type"  =>  "item",
                                                                             "id"    =>  $id,
                                                                             "path"  =>  $subcollection_vector_field ),
-//                                                                      "_cache"  =>  "expanded_items_" . $list_type . "_" . $id,
+    //                                                                      "_cache"  =>  "expanded_items_" . $list_type . "_" . $id,
                                                                     ),                                                    
                                                         ),  // terms
                                             Array( "term"  => Array( $vector_field => $id )),
@@ -564,101 +422,170 @@ GET list-test/_search?search_type=count
                                      );                     // query
 
 
-            } else {
-
-                $vector_field = Listerine::get_field_name( $list_type, true );
-
-                $query_obj[ "filter" ] =    Array(  "term"  =>  Array(   $vector_field  =>  $id ) );
-                            
-            }
-
                 $query = json_encode( $query_obj );
-                
+            
                 list( $result_count, $hits ) = Listerine::get_hits( $query );
 
-        }
+            }
     
-    } else {
+        } else {
 
-        $vector_field = Listerine::get_field_name( $list_type, false );
+            //
+            // UNEXPANDED        
+            //
+        
+            $vector_field = Listerine::get_field_name( $list_type, false );
     
-        if ( $collections_only ) {
+            if ( $collections_only ) {
 
-            // unexpanded (only children), only collections
+                // unexpanded (only children), only collections
 
+                $query_obj[ "query" ] = Array(
+                                "filtered" =>  Array(
+                                    "filter" =>  Array(
+                                        "bool" =>  Array(
+                                            "must"  =>  Array(  Array( "term"  => Array( $vector_field => $id )),
+                                                                Array( "term"  => Array( "mediatype" => "collection" ))
+                                                         ),     // must
+                                                     ),         // bool
+                                                 ),             // filter
+                                             ),                 // filtered
+                                         );                     // query
+
+            } else {
+    
+                // unexpanded (only children), all items
+            
+                $query_obj[ "filter" ] =    Array(  "term"  =>  Array(   $vector_field   =>  $id ) );                        
+
+            }
+
+            $query = json_encode( $query_obj );
+                            
+            list( $result_count, $hits ) = Listerine::get_hits( $query );
+
+        }    
+            
+        return Array( $result_count, $hits );
+    
+    }
+
+
+    private static function get_facets( $id, $list_type=Listerine::TYPE_COLLECTION, $bucket_term='collection_reduced' )
+    {
+
+        $vector_field = Listerine::get_field_name( $list_type, $expanded );
+        $sub_vector_field = Listerine::get_field_name( $list_type, true, true );
+
+        $query_obj = Array(     "_source"   =>  false,
+                                "from"      =>  0,
+                                "size"      =>  2000,
+                            );
+
+
+        $query_obj[ "aggregations" ] = Array(
+                        "facets" =>  Array(
+                            "terms" =>  Array(
+                                "field" =>  $bucket_term    )));
+
+        if ( $expanded ) {
+
+            //
+            // EXPANDED
+            //
+
+            // aggregate against all items with $id as parent, or, whose parent appears in list of sub_collections_expanded of $id
+            
             $query_obj[ "query" ] = Array(
                             "filtered" =>  Array(
                                 "filter" =>  Array(
                                     "bool" =>  Array(
-                                        "must"  =>  Array(  Array( "term"  => Array( $vector_field => $id )),
-                                                            Array( "term"  => Array( "mediatype" => "collection" ))
-                                                     ),     // must
+                                        "should"  =>  Array(
+                                            Array( "term"   => Array( $vector_field => $id )),
+                                            Array( "terms"  => Array( $vector_field =>
+                                            
+                                                //  MAGIC: pull 'terms' query match list from field of item in index foo
+                                                //  NOTE: terms matches are unanalyzed
+                                            
+                                                Array(
+                                                    "index" =>  Listerine::ES_INDEX,
+                                                    "type"  =>  "item",
+                                                    "id"    =>  $id,
+                                                    "path"  =>  $sub_vector_field       //  "sub_collection_expanded"
+                                                ))
+                                                        ),  // terms
+                                                     ),     // should
                                                  ),         // bool
                                              ),             // filter
                                          ),                 // filtered
-                                     );                     // query
+                                     );
 
         } else {
-    
-            // unexpanded (only children), all items
-            
-            $query_obj[ "filter" ] =    Array(  "term"  =>  Array(   $vector_field   =>  $id ) );                        
+        
+            //
+            // UNEXPANDED
+            //
+
+            // aggregate against all items with $id as parent only
+
+            $query_obj[ "query" ] = Array(
+                            "filtered" =>  Array(
+                                "filter" =>  Array( "term"   => Array( $vector_field => $id )
+                                             ),             // filter
+                                         ),                 // filtered
+                                     );
 
         }
 
         $query = json_encode( $query_obj );
-                            
-        list( $result_count, $hits ) = Listerine::get_hits( $query );
 
-    }    
-            
-    return Array( $result_count, $hits );
-    
-  }
+        list( $success, $reply_obj ) = es_dsl( $query, 'count' );           //  search_type=count means no results needed, just perform aggregation
+
+    }
+
 
   
-  private static function get_hits( $query, $field_of_interest='_id' )
-  {
+    private static function get_hits( $query, $field_of_interest='_id' )
+    {
 
-    if ( LISTERINE_DEBUG_OUTPUT )
-        echo $query . "\n";
+        if ( LISTERINE_DEBUG_OUTPUT )
+            echo $query . "\n";
 
-    list( $success, $reply_obj ) = Listerine::es_dsl( $query );
+        list( $success, $reply_obj ) = Listerine::es_dsl( $query );
 
-    if ( LISTERINE_DEBUG_OUTPUT )
-        var_dump( $reply_obj );
+        if ( LISTERINE_DEBUG_OUTPUT )
+            var_dump( $reply_obj );
 
-    $hits = Array();
+        $hits = Array();
         
-    if ( $success && (isset( $reply_obj[ 'hits' ] ))) {
-        $result_count = $reply_obj[ 'hits' ][ 'total' ];
-        foreach( $reply_obj[ 'hits' ][ 'hits' ] as $hit ) {
-            // extract field we're after, which may be top level (_ fields) or inside _source
-            if ( $field_of_interest[0] === '_' )
-                $target_field = $hit[ $field_of_interest ];
-            else
-                $target_field = $hit[ '_source' ][ $field_of_interest ];
-            if (isset( $target_field ))
-                if ( is_array( $target_field ) )
-                    $hits = array_merge( $hits, $target_field );
+        if ( $success && (isset( $reply_obj[ 'hits' ] ))) {
+            $result_count = $reply_obj[ 'hits' ][ 'total' ];
+            foreach( $reply_obj[ 'hits' ][ 'hits' ] as $hit ) {
+                // extract field we're after, which may be top level (_ fields) or inside _source
+                if ( $field_of_interest[0] === '_' )
+                    $target_field = $hit[ $field_of_interest ];
                 else
-                    $hits[] = $target_field;
+                    $target_field = $hit[ '_source' ][ $field_of_interest ];
+                if (isset( $target_field ))
+                    if ( is_array( $target_field ) )
+                        $hits = array_merge( $hits, $target_field );
+                    else
+                        $hits[] = $target_field;
+            }
         }
+
+        if ( LISTERINE_DEBUG_OUTPUT ) {
+            echo "Matched: " . $result_count . "\n";
+            var_dump( $hits );
+        }
+    
+        return Array( $result_count, $hits );
+
     }
 
-    if ( LISTERINE_DEBUG_OUTPUT ) {
-        echo "Matched: " . $result_count . "\n";
-        var_dump( $hits );
-    }
-    
-    return Array( $result_count, $hits );
-    
-
-  }
-
-  // get raw vector out of ES document for $id 
-  private static function get_raw_upward_vector_for_item( $id, $list_type=Listerine::TYPE_COLLECTION, $expanded=false )
-  {
+    // get raw vector out of ES document for $id 
+    private static function get_raw_upward_vector_for_item( $id, $list_type=Listerine::TYPE_COLLECTION, $expanded=false )
+    {
   
         $vector_field = Listerine::get_field_name( $list_type, $expanded );
                 
@@ -675,13 +602,13 @@ GET list-test/_search?search_type=count
         if ( LISTERINE_DEBUG_OUTPUT )
             var_dump( $collections );
 
-        return $collections;            
+        return $collections;
+    
+    }
 
-  }
-
-  // get members field out of ES document 
-  private static function get_raw_members_vector( $id, $expanded=false )
-  {
+    // get members field out of ES document 
+    private static function get_raw_members_vector( $id, $expanded=false )
+    {
         if ( $expanded )
             $members_field = "members_expanded";
         else
@@ -703,277 +630,60 @@ GET list-test/_search?search_type=count
 
         return $lists;            
 
-  }
-
-
-  // scan = duration to keep context of scan to ensure novel/complete results each time e.g. '1m'
-  private static function es_dsl( $query, $scan=false )
-  {
-  
-    $query_base_url = 'http://es-lb:9200/' . Listerine::ES_INDEX . '/_search';
-    if ( $scan )
-        $query_base_url .= '?scan=' . $scan . '&search_type=scan';
-        
-    $cmd = 'curl --silent --location -XGET ' . '"' . $query_base_url . '"' .  " -d" . "'" . $query . "'" ;
-
-    $response = Util::cmd( $cmd, 'STRING' );
-
-    if ( LISTERINE_DEBUG_OUTPUT )
-        echo $response . "\n";
-
-/*        
-      // TODO: abandoned curl wrapper as escape-encoding issue seemed intractable
-      
-      $query_url = $query_base_url;
-      
-      echo $query_url . "\n";
-      echo $query . "\n";
-      
-      $ci = curl_init();
-      curl_setopt($ci, CURLOPT_URL, $query_url );
-      curl_setopt($ci, CURLOPT_PORT, 9200);
-      curl_setopt($ci, CURLOPT_TIMEOUT, 2000);
-      curl_setopt($ci, CURLOPT_RETURNTRANSFER, 1);
-      curl_setopt($ci, CURLOPT_FORBID_REUSE, 0);
-      curl_setopt($ci, CURLOPT_CUSTOMREQUEST, 'POST');
-      curl_setopt($ci, CURLOPT_POSTFIELDS, $query );
-      
-      $response = curl_exec($ci);
-*/
-      
-    $reply_obj = json_decode($response, 1);
-      
-    $success = (isset( $reply_obj[ 'error' ]) == false );
-  
-    $reply = Array( $success, $reply_obj );
-      
-    return $reply;
-            
-  }
-  
-  // DEPRECATED
-  private static function query_for_expanded_subcollections( $id )
-  {
-
-    $subs = Listerine::expand_subcollections( $id );
-
-    if (!count( $subs ))
-        return false;
-        
-    $terms_arr = Array();
-    foreach( $subs as $sub ) {
-        $terms_arr[] = Array( "term"  =>  Array( "collection" =>  $sub ) );
     }
-    
-    $query_obj = Array(
-                                "query"     => Array(
-                                "filtered" =>  Array(
-                                    "filter" =>  Array(
-                                        "bool" =>  Array(
-                                            "minimum_should_match" =>   1,
-                                            "should"  =>  $terms_arr
-                                                     ),         // bool
-                                                 ),             // filter
-                                             ),                 // filtered
-                                         ),                     // query
-                        );        
-
-    return $query_obj;
-  
-  }
 
 
-
-  /*
-
-    GRAPH SERVICE
-  
-    Answer collections graph questions in a performant manner, using a combination of ES and Redis.
-
-    For any collection, answer with reasonably timely (but imperfect) reflection of on-disk truth: 
-        - expanded parents              ie      recursive parents           ie      reduced -> expanded
-        - expanded subcollections       ie      recursive descendants       ie      fully expanded children
-
-    Upward expansion to expanded vectors can be done using recursive logic and from reduced vectors.
-        Caching result will yield fast replies.
-        Indexing result will provide for downward expansion.
-        
-    Downward expansion requires query against expanded vectors in Elasticsearch.
-        Search against expanded vectors will yield fast replies and can support large response sets.
-    
-        
-  */
-
-  // this operation assumes that we have accurate up-to-date _expanded vectors in search scope
-  public static function expand_subcollections( $id, $list_type=Listerine::TYPE_COLLECTION ) 
-  {
-  
-    $field_name = Listerine::get_field_name( $list_type, true );
-
-    $query_obj = Array(     "_source"   =>  false,
-                            "from"      =>  0,
-                            "size"      =>  10000,              // should be sufficient to get them *all*... gulp
-                            "query"     => Array(
-                                "filtered" =>  Array(
-                                    "filter" =>  Array(
-                                        "bool" =>  Array(
-                                            "must"  =>  Array(  Array( "term"  => Array( $field_name => $id )),
-//                                                                Array( "term"  => Array( "mediatype" => "collection" ))
-                                                         ),     // must
-                                                     ),         // bool
-                                                 ),             // filter
-                                             ),                 // filtered
-                                         ),                     // query
-                        );
-            
-    $query = json_encode( $query_obj );
-                            
-    list( $result_count, $hits ) = Listerine::get_hits( $query );
-
-    return $hits;
-    
-  }
-
-
-  // recursively expand the graph nodes 
-  // caches results if LISTERINE_NOCACHING is false  
-  private static function expand_ancestors( $id, $list_type=Listerine::TYPE_COLLECTION, &$ancestor_list=Array() )
-  {
-    
-    $parents = (array) Listerine::retrieve_value( $id, $list_type );
-                    
-    foreach ($parents as $parent) {
-    
-        if (in_array( $parent, $ancestor_list, true))
-            continue;
-
-        $ancestor_list[] = $parent;
-        
-        $parent_ancestor_list = Listerine::expand_ancestors( $parent, $list_type, $ancestor_list );
-
-        foreach ( $parent_ancestor_list as $candidate )
-            if (!in_array( $candidate, $ancestor_list, true))
-                $ancestor_list[] = $candidate;
-    }
-    
-    return $ancestor_list;
-    
-  }
-
-
-  
-
-  /*
-  
-    REDIS CACHE via Cache.inc
-
-  */
-  
-  // note: passively caches
-
-  private static function retrieve_value( $name, $list_type=Listerine::TYPE_COLLECTION, $secsAlive=600  )
-  {
-    
-    if ( LISTERINE_NOCACHING ) {
-
-        
-        $col = Listerine::get_collections_for_item( $name, false );     // get reduced vector straight from ES
-        return $col;
-    
-    } else {
-
-        $ret = Cache::value(    "LISTERINE-GRAPHNODE-" . $name,
-                                $secsAlive,
-                                function() use ( &$name, &$list_type)
-                                {
-                                    if ( $list_type == Listerine::TYPE_COLLECTION )
-                                        $col = Listerine::get_collections_for_item( $name, false );
-                                    else
-                                        $col = Listerine::get_lists_for_item( $name, false );
-                                    $j = json_encode( $col );
-                                  return $j;
-                                } );
-    
-        return json_decode( $ret, 1 );
-
-    }
-  
-  }  
-  
-  
-  // proactive caching
-
-  // populate the graph node data in Redis, currently, for a brief period
-  public static function cache_graph_data( $expiration=600 )
-  {
-    // get current count 
-    
-    $query_obj = Array(     "_source"   =>  false,
-                            "size"      =>  0,
-                            "filter"    =>  Array(      
-                                                      "term"   =>
-                                                        Array(   "mediatype"  =>  "collection" ),
-                                                 ),
-                        );
-    
-    $query = json_encode( $query_obj );
-  
-    list( $success, $reply_obj ) = Listerine::es_dsl( $query );
-
-    $collections_to_cache = 0;
-    if ( $success && (isset( $reply_obj[ 'hits' ] )) && (isset( $reply_obj[ 'hits' ][ 'total' ] )))
-        $collections_to_cache = intval( $reply_obj[ 'hits' ][ 'total' ] );
-
-    if ( LISTERINE_DEBUG_OUTPUT )
-        echo "Collections to cache: " . $collections_to_cache .  "\n";
-
-    $query_obj = Array(     "_source"   =>  Array(      "collection_reduced" ),
-                            "size"      =>  100,
-                            "filter"    =>  Array(        
-                                                        "term"   =>
-                                                        Array(   "mediatype"  =>  "collection" ),
-                                                 ),
-                        );
-
-    while ( $collections_to_cache > 0 )
+    // scan = duration to keep context of scan to ensure novel/complete results each time e.g. '1m'
+    private static function es_dsl( $query, $search_type=false )
     {
-        list( $success, $reply_obj ) = Listerine::es_dsl( $query, '1m' );
+  
+        $query_base_url = 'http://es-lb:9200/' . Listerine::ES_INDEX . '/_search';
 
-        if ( $success && (isset( $reply_obj[ 'hits' ] ))) {
-
-            $collections_cached = 0;
-            foreach( (array)$reply_obj[ 'hits' ] as $hit ) {                
-                Listerine::cache_value( $hit[ '_id' ],
-                                        $hit[ '_source' ][ 'collection_reduced' ],
-                                        $expiration );
-                $collections_cached += 1;                                        
-            }
-
-            if ( LISTERINE_DEBUG_OUTPUT )
-                echo "Cached this scan: " . $collections_cached .  "\n";
-            
-            $collections_to_cache -= $collections_cached;
+        if ( $search_type ) {
+            $query_base_url .= '?search_type=' . $search_type;
+            if ( $search_type == 'scan' )
+                $query_base_url .= '&scan=1m' . '&search_type=scan';
         }
+        
+        $cmd = 'curl --silent --location -XGET ' . '"' . $query_base_url . '"' .  " -d" . "'" . $query . "'" ;
+
+        $response = Util::cmd( $cmd, 'STRING' );
+
+        if ( LISTERINE_DEBUG_OUTPUT )
+            echo $response . "\n";
+
+        /*        
+          // TODO: abandoned curl wrapper as escape-encoding issue seemed intractable
+  
+          $query_url = $query_base_url;
+  
+          echo $query_url . "\n";
+          echo $query . "\n";
+  
+          $ci = curl_init();
+          curl_setopt($ci, CURLOPT_URL, $query_url );
+          curl_setopt($ci, CURLOPT_PORT, 9200);
+          curl_setopt($ci, CURLOPT_TIMEOUT, 2000);
+          curl_setopt($ci, CURLOPT_RETURNTRANSFER, 1);
+          curl_setopt($ci, CURLOPT_FORBID_REUSE, 0);
+          curl_setopt($ci, CURLOPT_CUSTOMREQUEST, 'POST');
+          curl_setopt($ci, CURLOPT_POSTFIELDS, $query );
+  
+          $response = curl_exec($ci);
+        */
+  
+        $reply_obj = json_decode($response, 1);
+  
+        $success = (isset( $reply_obj[ 'error' ]) == false );
+
+        $reply = Array( $success, $reply_obj );
+  
+        return $reply;
+            
     }
-  
-  }
-  
-  private static function cache_value( $name, $val, $secsAlive )
-  {
 
-    $ret = Cache::value(    "LISTERINE-GRAPHNODE-" . $name,
-                            $secsAlive,
-                            function() use (&$val)
-                            {
-                              return $val;
-                            } );
-
-    return $ret;
-  
-  }  
-  
-  private static function get_field_name( $list_type, $expanded, $subcollections=false )
-  {
+    private static function get_field_name( $list_type, $expanded, $subcollections=false )
+    {
                     
         if ( $expanded )
             $vector_field = $list_type . "_expanded";
@@ -985,7 +695,312 @@ GET list-test/_search?search_type=count
             
         return $vector_field;
         
-  }
+    }
+
+
+    /*
+
+        GRAPH SERVICE
+
+        Answer collections graph questions leveraging ES terms query, and maybe Redis
+
+        For any collection, list, or set, answer with reasonably timely (but imperfect) reflection of on-disk truth: 
+            - expanded parents              ie      recursive parents           ie      reduced -> expanded
+            - expanded subcollections       ie      recursive descendants       ie      fully expanded children collections
+
+
+        Upward expansion to expanded vectors can also be done using recursive logic and from reduced vectors
+            Indexing _expanded fields provides for subsequent second pass to cache downward expansions.
+    
+        Downward expansion REQUIRES query against sub_<foo>_expanded vectors in Elasticsearch
+            Queries against expanded vectors yield fast replies and support large response sets.
+            
+    */
+
+    // this operation assumes that we have accurate up-to-date _expanded vectors in search scope
+    public static function expand_subcollections( $id, $list_type=Listerine::TYPE_COLLECTION ) 
+    {
+  
+        $field_name = Listerine::get_field_name( $list_type, true );
+
+        $query_obj = Array(     "_source"   =>  false,
+                                "from"      =>  0,
+                                "size"      =>  10000,              // should be sufficient to get them *all*... gulp
+                                "query"     => Array(
+                                    "filtered" =>  Array(
+                                        "filter" =>  Array(
+                                            "bool" =>  Array(
+                                                "must"  =>  Array(  Array( "term"  => Array( $field_name => $id )),
+    //                                                                Array( "term"  => Array( "mediatype" => "collection" ))
+                                                             ),     // must
+                                                         ),         // bool
+                                                     ),             // filter
+                                                 ),                 // filtered
+                                             ),                     // query
+                            );
+            
+        $query = json_encode( $query_obj );
+                            
+        list( $result_count, $hits ) = Listerine::get_hits( $query );
+
+        return $hits;
+    
+    }
+
+    // public callers shoud USUALLY use get_<foo>_for_item(), which uses existing cached version
+    //  this version provides run-time expansion but recurses, costing N queries
+
+    // recursively expand the graph nodes 
+    // caches results if LISTERINE_NOCACHING is false  
+    private static function expand_ancestors( $id, $list_type=Listerine::TYPE_COLLECTION, &$ancestor_list=Array() )
+    {
+    
+        $parents = (array) Listerine::retrieve_value( $id, $list_type );
+                    
+        foreach ($parents as $parent) {
+    
+            if (in_array( $parent, $ancestor_list, true))
+                continue;
+
+            $ancestor_list[] = $parent;
+        
+            $parent_ancestor_list = Listerine::expand_ancestors( $parent, $list_type, $ancestor_list );
+
+            foreach ( $parent_ancestor_list as $candidate )
+                if (!in_array( $candidate, $ancestor_list, true))
+                    $ancestor_list[] = $candidate;
+        }
+    
+        return $ancestor_list;
+    
+    }
+  
+    // returns ( reduced vector, expanded vector ) 
+    public static function reduce_collection_vector( $id, $original_collections_vector=false )
+    {
+        
+        if ( !$original_collections_vector )
+            $original_collections_vector = Listerine::get_original_collections_for_item( $id );
+
+        if ( LISTERINE_DEBUG_OUTPUT )
+            var_dump( $original_collections_vector );
+
+        $accurately_reduced_parents = false;
+        $reason = '';
+
+        $vector_expanded = Array();
+
+        foreach( $original_collections_vector as $parent ) {
+        
+            if (! in_array( $parent, $vector_expanded ) )
+                $vector_expanded[] = $parent;
+        
+            $parent_ancestors = Listerine::get_collections_for_item( $parent, true );
+
+            if ($parent_ancestors)            
+                foreach( $parent_ancestors as $ancestor )                
+                    if (! in_array( $ancestor, $vector_expanded ) )
+                        $vector_expanded[] = $ancestor;
+            
+        }
+
+        $vector_reduced = Array();
+
+        foreach( $vector_expanded as $ancestor_in_expansion )        
+            if ( in_array( $ancestor_in_expansion, $original_collections_vector ) )
+                $original_collections_vector = array_diff( $original_collections_vector, Array( $ancestor_in_expansion ) );     // remove ancestor from original vector
+
+        if ( count( $vector_expanded ) > 0 )
+            $vector_reduced[] = $vector_expanded[ 0 ];
+
+        // reduced = proper parent, and, anything in the original vector not in the summed 
+        $vector_reduced = array_merge( $vector_reduced, $original_collections_vector );
+
+        return Array( $vector_reduced, $vector_expanded );
+  
+    }
+    
+    /*
+        INVALIDATION
+    
+    */
+    
+    // the list of all items which need to be reindexed, to 
+    // TODO: optimization potential: process calculated fields now, if we can, as hints
+
+    // collections
+    //      everything in sub_set_exetended
+    //      everything in set_exetended 
+    //      everything in members_original, which is itself 
+
+    public static function invalidation_list_for_collection( $id, $calculate_delta=false )
+    {
+    
+        $query_obj = Array(     "_source"   =>  false,
+                                "from"      =>  0,
+                                "size"      =>  10000,              // should be sufficient to get them *all*... gulp
+                                "query"     => Array(
+                                    "filtered" =>  Array(
+                                        "filter" =>  Array(
+                                            "bool" =>  Array(
+                                                "should"  =>  Array(
+
+                                                    // everything that has $id in its list of subcollections/lists *might* be affected                                                        
+                                                    Array( "term"  => Array( "sub_set_expanded" => $id )),
+
+                                                    // everything that has $id in its list of parent collections/lists *might* be affected
+                                                    Array( "term"  => Array( "set_expanded" => $id )),
+
+                                                    // everything that has $id as a proper list parent (in its list_reduced)
+                                                    Array( "term"  => Array( "list_reduced" => $id ))
+
+                                                             ),     // should
+                                                         ),         // bool
+                                                     ),             // filter
+                                                 ),                 // filtered
+                                             ),                     // query
+                        );
+                    
+        $query = json_encode( $query_obj );
+                            
+        list( $result_count, $hits ) = Listerine::get_hits( $query );
+
+        return $hits;
+    
+    }
+    
+
+    //  items
+    //      every list whose members_original lists $id
+
+    public static function invalidation_list_for_item( $id, $calculate_delta=false )
+    {    
+
+        $query_obj = Array(     "_source"   =>  false,
+                                "from"      =>  0,
+                                "size"      =>  10000,              // should be sufficient to get them *all*... gulp
+                                "filter"    => Array(
+                                    "term" =>  Array(  "members_original"   => $id )
+                                    )
+                            );
+            
+        $query = json_encode( $query_obj );
+                            
+        list( $result_count, $hits ) = Listerine::get_hits( $query );
+
+        return $hits;
+    
+    }
+
+
+
+    /*
+
+    REDIS CACHE via Cache.inc
+
+    */
+
+    // note: passively caches
+
+    private static function retrieve_value( $name, $list_type=Listerine::TYPE_COLLECTION, $secsAlive=600  )
+    {
+    
+        if ( LISTERINE_NOCACHING ) {
+
+        
+            $col = Listerine::get_collections_for_item( $name, false );     // get reduced vector straight from ES
+            return $col;
+    
+        } else {
+
+            $ret = Cache::value(    "LISTERINE-GRAPHNODE-" . $name,
+                                    $secsAlive,
+                                    function() use ( &$name, &$list_type)
+                                    {
+                                        if ( $list_type == Listerine::TYPE_COLLECTION )
+                                            $col = Listerine::get_collections_for_item( $name, false );
+                                        else
+                                            $col = Listerine::get_lists_for_item( $name, false );
+                                        $j = json_encode( $col );
+                                      return $j;
+                                    } );
+    
+            return json_decode( $ret, 1 );
+
+        }  
+    }  
+  
+  
+    // proactive caching
+
+    // populate the graph node data in Redis, currently, for a brief period
+    public static function cache_graph_data( $expiration=600 )
+    {
+        // get current count 
+    
+        $query_obj = Array(     "_source"   =>  false,
+                                "size"      =>  0,
+                                "filter"    =>  Array(      
+                                                          "term"   =>
+                                                            Array(   "mediatype"  =>  "collection" ),
+                                                     ),
+                            );
+    
+        $query = json_encode( $query_obj );
+  
+        list( $success, $reply_obj ) = Listerine::es_dsl( $query );
+
+        $collections_to_cache = 0;
+        if ( $success && (isset( $reply_obj[ 'hits' ] )) && (isset( $reply_obj[ 'hits' ][ 'total' ] )))
+            $collections_to_cache = intval( $reply_obj[ 'hits' ][ 'total' ] );
+
+        if ( LISTERINE_DEBUG_OUTPUT )
+            echo "Collections to cache: " . $collections_to_cache .  "\n";
+
+        $query_obj = Array(     "_source"   =>  Array(      "collection_reduced" ),
+                                "size"      =>  100,
+                                "filter"    =>  Array(        
+                                                            "term"   =>
+                                                            Array(   "mediatype"  =>  "collection" ),
+                                                     ),
+                            );
+
+        while ( $collections_to_cache > 0 )
+        {
+            list( $success, $reply_obj ) = Listerine::es_dsl( $query );  // TODO: decorate with 1m cache
+
+            if ( $success && (isset( $reply_obj[ 'hits' ] ))) {
+
+                $collections_cached = 0;
+                foreach( (array)$reply_obj[ 'hits' ] as $hit ) {                
+                    Listerine::cache_value( $hit[ '_id' ],
+                                            $hit[ '_source' ][ 'collection_reduced' ],
+                                            $expiration );
+                    $collections_cached += 1;                                        
+                }
+
+                if ( LISTERINE_DEBUG_OUTPUT )
+                    echo "Cached this scan: " . $collections_cached .  "\n";
+            
+                $collections_to_cache -= $collections_cached;
+            }
+        }
+  
+      }
+  
+    private static function cache_value( $name, $val, $secsAlive )
+    {
+
+        $ret = Cache::value(    "LISTERINE-GRAPHNODE-" . $name,
+                                $secsAlive,
+                                function() use (&$val)
+                                {
+                                  return $val;
+                                } );
+
+        return $ret;
+  
+    }  
 
 }
 

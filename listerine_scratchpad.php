@@ -2,16 +2,24 @@
 <?
 /* require_once '/petabox/setup.inc'; */
 require_once '/home/ximm/petabox/setup.inc';
-require_once '/home/ximm/projects/search/Listerine.inc';
+require_once '/home/ximm/projects/search/listerine/Listerine.inc';
 
 
-    list( $ct, $ret ) = Listerine::get_items_in_collection( 'americana', TRUE, FALSE );
-    echo $ct . "\n";
+
+    $ret = Listerine::reduce_collection_vector( 'GoodEati1951' );
+    
+//    $ret = Listerine::invalidation_list_for_item( 'GoodEati1951' );
+
+//    $ret = Listerine::invalidation_list_for_collection( 'americana' );
+    var_dump( $ret );
     
     exit();
 
     $ret = Listerine::expand_subcollections( 'americana' );
     var_dump( $ret );
+
+    list( $ct, $ret ) = Listerine::get_items_in_collection( 'americana', TRUE, FALSE );
+    echo $ct . "\n";
 
 
     echo "REDUCED:" . "\n";    

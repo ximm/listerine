@@ -26,8 +26,9 @@ class ESIndexer
   const SKIP_SUBS = FALSE;     //  leave true only for first pass of collection graph indexing!
   
   const MAX_FAVORITES = 10000;
-  const ITEMS_LINE_DUMP = "/1/ximm_tmp/linedump-cleaned_combined.json";
-
+ // const ITEMS_LINE_DUMP = "/1/ximm_tmp/linedump-cleaned_combined.json";
+  const ITEMS_LINE_DUMP = "/1/ximm_tmp/cut/linedump-cleaned_items.json";
+    
   public static $fields_of_interest = array(    'members_original',
                                                 'collection_reduced',
                                                 'collection_expanded',
@@ -48,8 +49,8 @@ class ESIndexer
     if ($ln_hint)
         $ln = $ln_hint;
     else
-        $ln = Util::cmd( 'grep "id": "' . $id .'" ' . self::ITEMS_LINE_DUMP );
-    
+        $ln = Util::cmd( 'grep ' . "'" . '"id": "' . $id .'"'. "' " . self::ITEMS_LINE_DUMP );
+        
     $provided_value_dict = json_decode( $ln, TRUE );
 
     $lists = Array();
@@ -124,7 +125,7 @@ class ESIndexer
       
       if ( $local_md ) {
 
-          $m = Metadata::get_obj($id, array('authed' => true,
+          $m = Metadata::get_obj(   $id, array('authed' => true,
                                             'files_limit' => 1000,
                                             'get_timeout' => 1,
                                             'dontcache' => true));
@@ -132,10 +133,13 @@ class ESIndexer
 
           $murl = "http://archive.org/metadata/" . $id ;
           $murl .= "?dontcache";
-      
-          $mj = file_get_contents( $murl );
-          $m = json_decode( $mj, 1 );
-      
+        
+          try {
+              $mj = file_get_contents( $murl );
+              $m = json_decode( $mj, 1 );
+          } catch (Exception $e) {
+              $m = Array();
+          }
       }
 /*                                        
       $murl = "http://archive.org/metadata/" . $id ;
@@ -163,7 +167,7 @@ class ESIndexer
       if (isset($m['is_dark'])) // belt + suspenders???
         $delme = true;
  
-      if ($delme){
+      if ( $delme ) {
         // doing a SE delete!
         self::queue_delete($id);
         /**/ if (@$m['is_dark'])                        $reason = "API as is_dark";

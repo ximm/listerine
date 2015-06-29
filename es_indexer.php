@@ -3,7 +3,7 @@
 // Copyright(c)2005-(c)2015 Internet Archive. Software license GPL version 2.
 
 /* require_once '/petabox/setup.inc'; */
-require_once '/home/ximm/petabox/setup.inc';
+require_once '/home/ximm/petabox/setup.inc';                    //   must use schema in petabox/etc/solr/conf with our fields!!!
 require_once 'Console/CommandLine.php'; // um, part of PEAR
 
 require_once '/home/ximm/projects/search/listerine/ESIndexer.inc';
@@ -47,7 +47,7 @@ function fatal_handler()
 class IndexerHelper
 {
 
-  const ITEMS_LINE_DUMP = "/1/ximm_tmp/linedump-cleaned_combined.json";
+  const ITEMS_LINE_DUMP = "/1/ximm_tmp/cut/linedump-cleaned_combined.json";
   const POST_BATCH_SIZE = 1000;
   
   public function __construct( $dump_path=false, $ptr=false, $post=true )
@@ -183,29 +183,50 @@ class IndexerHelper
     if (!$this->spl_file_object->eof()) {
     
         $hint_ln = $this->spl_file_object->current();
-        $hla = json_decode( $hint_ln, TRUE ); 
-        if (isset($hla['id'])) {
-            $ids[] = $hla['id'];
-            $line_hints[ $hla['id'] ] = trim( $hint_ln );
-        }
-    
-        $left = max( 0, $batch_size - 1);
         $this->spl_file_ptr += 1;
-    
-        while (!$this->spl_file_object->eof() && ($left > 0) ) {
-            $hint_ln = $this->spl_file_object->fgets();
-            $left -= 1;
-            $this->spl_file_ptr += 1;
-            $hla = json_decode( $hint_ln, TRUE ); 
+        
+        if ( (! isset($hint_ln)) || $hint_ln=='' )
+            continue;
+
+        $left = max( 0, $batch_size - 1);
+            
+        $hla = json_decode( $hint_ln, TRUE );
+        if ( isset( $hla )  ) {
             if (isset($hla['id'])) {
                 $ids[] = $hla['id'];
                 $line_hints[ $hla['id'] ] = trim( $hint_ln );
             }
+        } else {
+            $maybe = trim( $hint_ln );
+            if ( isset( $maybe ) && ( $maybe !='' ) )
+                $ids[] = $maybe;
         }
-    
+        
+        while (!$this->spl_file_object->eof() && ($left > 0) ) {
+
+            $hint_ln = $this->spl_file_object->fgets();
+
+            $this->spl_file_ptr += 1;
+            if ( (! isset($hint_ln)) || $hint_ln=='' )
+                continue;            
+
+            $left -= 1;
+
+            $hla = json_decode( $hint_ln, TRUE );
+            if ( isset( $hla )  ) {
+                if (isset($hla['id'])) {
+                    $ids[] = $hla['id'];
+                    $line_hints[ $hla['id'] ] = trim( $hint_ln );
+                }
+            } else {
+                $maybe = trim( $hint_ln );
+                if ( isset( $maybe )  && ( $maybe !='' ) )
+                    $ids[] = $maybe;
+            }
+        }    
     }
 
-    if (count($ids)){
+    if ( count( $ids ) ){
       $updated = true;
       error_log('updating for '.count($ids).' ids');
     }
@@ -213,13 +234,13 @@ class IndexerHelper
     $finished = array();
 
     $notes = array();
-    foreach ($ids as $id)
+    foreach ( $ids as $id )
     {
       $success = false;
       try
       {
         if ( isset( $line_hints[$id] ) )
-          $ln_hint = $line_hints[$id];
+          $ln_hint = $line_hints[ $id ];
         else
           $ln_hint = false;
                   
@@ -293,7 +314,6 @@ function main()
     'help_name'   => 'PATH',
     'description' => 'path for dump file',
     'action'      => 'StoreString',
-    'default'     => '/1/ximm_tmp/linedump-cleaned_items.tsv'
   ));
   
   $parser->addOption('ldptr', array(
@@ -353,7 +373,7 @@ function main()
   
       if ( file_exists($c->options['ldpath']) == FALSE ) {
 
-          error_log( "$Source file does not exist $c->options['ldpath']" );
+          error_log( "Source file does not exist " . $c->options['ldpath'] );
 
       } else {
 
